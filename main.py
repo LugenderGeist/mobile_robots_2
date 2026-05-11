@@ -4,6 +4,7 @@ import math
 import time
 import video as vp
 from robotino import (connect_to_robotino, send_velocity, stop_robot)
+from comparison import save_results
 
 # РАЗМЕРЫ ПОЛЯ
 FIELD_WIDTH = 220.0
@@ -13,13 +14,13 @@ FIELD_HEIGHT = 220.0
 EDGE_MARGIN = 5
 OBSTACLE_MIN_AREA = 800
 OBSTACLE_MAX_AREA = 500000
-THRESHOLD = 120
+THRESHOLD = 170
 ROBOT_RADIUS = 32.0
 OBSTACLE_SAFETY_MARGIN = 0.0
 PLANNING_STEP = 2.0
 
 # УПРАВЛЕНИЕ
-MAX_SPEED = 0.25
+MAX_SPEED = 0.3
 SPEED_KP = 1.4
 ACC_SPEED_ERROR = 5.0
 MAX_OMEGA = 0.5
@@ -40,7 +41,6 @@ def init_video_processor():
         vp.load_corners(CORNERS_FILE)
 
 def mode_camera():
-    """Режим камеры: визуализация стартовой и целевой точек, построение маршрута (без управления роботом)"""
     init_video_processor()
 
     cap = cv2.VideoCapture(1)
@@ -54,12 +54,8 @@ def mode_camera():
     )
 
     # ЗАДАЁМ КООРДИНАТЫ СТАРТОВОЙ И ЦЕЛЕВОЙ ТОЧЕК
-    start_point = (20.0, 20.0)     # стартовая точка (см)
-    target_point = (200.0, 200.0)    # целевая точка (см)
-
-    print(f"Стартовая точка: ({start_point[0]:.1f}, {start_point[1]:.1f}) см")
-    print(f"Целевая точка: ({target_point[0]:.1f}, {target_point[1]:.1f}) см")
-    print("Нажмите 'q' для выхода\n")
+    start_point = (20.0, 20.0)  # стартовая точка (см)
+    target_point = (200.0, 200.0)  # целевая точка (см)
 
     planner = None
     frame_count = 0
@@ -115,14 +111,14 @@ def mode_camera():
         if path:
             rectified = draw_path_on_frame(planner, rectified, path, (0, 255, 255))
 
-        # Отрисовка стартовой точки (зелёная)
+        # Отрисовка стартовой точки
         tx = int(start_point[0] / FIELD_WIDTH * rectified.shape[1])
         ty = int(rectified.shape[0] - (start_point[1] / FIELD_HEIGHT * rectified.shape[0]))
         cv2.circle(rectified, (tx, ty), 8, (0, 255, 0), -1)
         cv2.circle(rectified, (tx, ty), 12, (0, 255, 0), 2)
         cv2.putText(rectified, "START", (tx + 10, ty - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # Отрисовка целевой точки (красная)
+        # Отрисовка целевой точки
         tx = int(target_point[0] / FIELD_WIDTH * rectified.shape[1])
         ty = int(rectified.shape[0] - (target_point[1] / FIELD_HEIGHT * rectified.shape[0]))
         cv2.circle(rectified, (tx, ty), 8, (255, 0, 0), -1)
@@ -155,7 +151,6 @@ def mode_camera():
     cv2.destroyAllWindows()
 
 def mode_robot():
-    """Режим управления роботом: движение к стартовой точке, затем к целевой"""
     if not connect_to_robotino():
         print("Не удалось подключиться к Robotino!")
         return
@@ -173,11 +168,8 @@ def mode_robot():
     )
 
     # ЗАДАЁМ КООРДИНАТЫ СТАРТОВОЙ И ЦЕЛЕВОЙ ТОЧЕК
-    start_point = (200.0, 200.0)     # стартовая точка (см)
-    target_point = (100.0, 100.0)    # целевая точка (см)
-
-    print(f"Стартовая точка: ({start_point[0]:.1f}, {start_point[1]:.1f}) см")
-    print(f"Целевая точка: ({target_point[0]:.1f}, {target_point[1]:.1f}) см")
+    start_point = (20.0, 20.0)  # стартовая точка (см)
+    target_point = (200.0, 200.0)  # целевая точка (см)
 
     planner = None
     moving = False
@@ -185,6 +177,13 @@ def mode_robot():
     at_start = False
     current_robot_pos = None
     path = None
+
+    # ПЕРЕМЕННЫЕ ДЛЯ СБОРА ДАННЫХ
+    planned_path = None
+    actual_trajectory = []
+    search_time_ms = 0
+    travel_start_time = None
+    speed_log = []
 
     def get_robot_angle(marker_corners) -> float:
         if marker_corners is None:
@@ -221,8 +220,6 @@ def mode_robot():
 
     frame_count = 0
 
-    print("\n=== ЭТАП 1: ДВИЖЕНИЕ К СТАРТОВОЙ ТОЧКЕ ===")
-
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -241,10 +238,14 @@ def mode_robot():
         if found:
             robot_x, robot_y = vp.transform_coordinates(center_pixel[0], center_pixel[1])
             current_robot_pos = (robot_x, robot_y)
+
+            # ЗАПИСЫВАЕМ ТРАЕКТОРИЮ
+            if travel_start_time is not None:
+                actual_trajectory.append((robot_x, robot_y, time.time()))
         else:
             current_robot_pos = None
             if moving or rotating:
-                print("Робот потерян! Останавливаем движение")
+                print("Робот потерян")
                 stop_robot()
                 moving = False
                 rotating = False
@@ -260,14 +261,12 @@ def mode_robot():
                 dist_to_start = math.hypot(start_point[0] - current_robot_pos[0], start_point[1] - current_robot_pos[1])
 
                 if dist_to_start < ACC_SPEED_ERROR:
-                    print(f"\nДостигнута стартовая точка! Ошибка: {dist_to_start:.1f} см")
                     stop_robot()
                     at_start = True
                     moving = False
                     rotating = False
                     planner = None
                     path = None
-                    print("\n=== ЭТАП 2: ДВИЖЕНИЕ К ЦЕЛЕВОЙ ТОЧКЕ ===")
                     continue
 
                 # Выравнивание угла
@@ -278,13 +277,11 @@ def mode_robot():
 
                 if delta > ACC_ANGLE_ERROR and not rotating:
                     rotating = True
-                    print("Начинаем выравнивание угла...")
                     continue
 
                 if rotating:
                     if rotate_to_reference_angle(current_angle):
                         rotating = False
-                        print("Угол выровнен")
                     continue
 
                 # Создаём планировщик и строим путь к стартовой точке
@@ -300,10 +297,9 @@ def mode_robot():
                     update_obstacles(planner, obstacles)
                     path = find_path(planner, current_robot_pos, start_point)
                     if path:
-                        print(f"Путь к стартовой точке построен! Точек: {len(path)}")
                         moving = True
                     else:
-                        print("Не удалось построить путь к стартовой точке!")
+                        print("Не удалось построить путь к стартовой точке")
 
                 # Движение
                 if moving and planner and path:
@@ -328,8 +324,19 @@ def mode_robot():
             dist_to_target = math.hypot(target_point[0] - current_robot_pos[0], target_point[1] - current_robot_pos[1])
 
             if dist_to_target < ACC_SPEED_ERROR:
-                print(f"\nДостигнута целевая точка! Ошибка: {dist_to_target:.1f} см")
+                travel_time = time.time() - travel_start_time if travel_start_time else 0
                 stop_robot()
+
+                # СОХРАНЯЕМ РЕЗУЛЬТАТЫ
+                save_results(
+                    "comparison_report.txt",
+                    planned_path,
+                    actual_trajectory,
+                    search_time_ms,
+                    travel_time,
+                    max(speed_log) if speed_log else 0,
+                    sum(speed_log) / len(speed_log) if speed_log else 0
+                )
                 break
 
             # Выравнивание угла
@@ -340,13 +347,11 @@ def mode_robot():
 
             if delta > ACC_ANGLE_ERROR and not rotating:
                 rotating = True
-                print("Начинаем выравнивание угла...")
                 continue
 
             if rotating:
                 if rotate_to_reference_angle(current_angle):
                     rotating = False
-                    print("Угол выровнен")
                 continue
 
             # Создаём планировщик и строим путь к целевой точке
@@ -360,14 +365,17 @@ def mode_robot():
                     edge_limit_cm=EDGE_LIMIT_CM
                 )
                 update_obstacles(planner, obstacles)
+                search_start = time.time()
                 path = find_path(planner, current_robot_pos, target_point)
+                search_time_ms = (time.time() - search_start) * 1000
                 if path:
-                    print(f"Путь к целевой точке построен! Точек: {len(path)}")
+                    planned_path = path
+                    if travel_start_time is None:
+                        travel_start_time = time.time()
                     moving = True
                 else:
-                    print("Не удалось построить путь к целевой точке!")
+                    print("Не удалось построить путь к целевой точке")
 
-            # Движение
             if moving and planner and path:
                 vx, vy = get_velocities(
                     planner,
@@ -378,11 +386,12 @@ def mode_robot():
                 )
                 send_velocity(vx, -vy, 0.0)
 
+                speed = math.hypot(vx, vy) * 100.0
+                speed_log.append(speed)
+
                 if frame_count % 30 == 0:
                     print(f"vx={vx:.3f}, vy={vy:.3f}, до цели={dist_to_target:.1f} см")
 
-        # ========== ОТРИСОВКА ==========
-        # Обновляем карту препятствий и рисуем контуры (если есть planner)
         if planner is not None:
             update_obstacles(planner, obstacles)
             rectified = draw_planning_contours(planner, rectified)
@@ -412,8 +421,7 @@ def mode_robot():
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
         info_y += 25
         if current_robot_pos:
-            status = "MOVING TO START" if not at_start else "MOVING TO GOAL"
-            cv2.putText(rectified, f"Robot: ({current_robot_pos[0]:.1f}, {current_robot_pos[1]:.1f}) {status}",
+            cv2.putText(rectified, f"Robot: ({current_robot_pos[0]:.1f}, {current_robot_pos[1]:.1f})",
                         (10, info_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
         cv2.imshow("Robot Control", rectified)
@@ -427,7 +435,7 @@ def mode_robot():
     cv2.destroyAllWindows()
 
 def main():
-    print("1. Реальная камера (только визуализация)")
+    print("1. Реальная камера")
     print("2. Управление роботом")
 
     choice = input("\n1 или 2? ").strip()

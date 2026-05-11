@@ -6,7 +6,7 @@ BASE_URL = f"http://{IP_ADDRESS}"
 
 def connect_to_robotino() -> bool:
     try:
-        response = requests.get(f"{BASE_URL}/data/odometry", timeout=0.5)
+        response = requests.get(f"{BASE_URL}/data/odometry", timeout=1)
         if response.status_code == 200:
             print("Успешное соединение с Robotino!")
             return True
