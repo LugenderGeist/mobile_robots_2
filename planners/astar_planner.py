@@ -156,8 +156,7 @@ def find_path(planner: dict, start: Tuple[float, float], goal: Tuple[float, floa
     return []
 
 def get_velocities(planner: dict, current_x: float, current_y: float,
-                   max_speed: float = 0.5,
-                   kp: float = 0.8, acceptable_error: float = 5.0) -> Tuple[float, float]:
+                   max_speed: float, kp: float, acc_speed_error: float) -> Tuple[float, float]:
     path = planner['path']
     if not path or len(path) < 2:
         return 0.0, 0.0
@@ -171,21 +170,21 @@ def get_velocities(planner: dict, current_x: float, current_y: float,
             min_dist = dist
             nearest_idx = i
 
-    target_idx = min(nearest_idx + 3, len(path) - 1)  # на 3 точки вперёд
+    target_idx = min(nearest_idx + 3, len(path) - 1)
     target_x, target_y = path[target_idx]
 
     error_x = target_x - current_x
     error_y = target_y - current_y
     error_distance = math.hypot(error_x, error_y)
 
-    min_speed_ms = 0.03  # 3 см/с
+    min_speed_ms = 0.03
 
     max_speed_cm = max_speed * 100.0
     speed_cm = min(kp * error_distance, max_speed_cm)
 
     final_goal = path[-1]
     dist_to_final = math.hypot(final_goal[0] - current_x, final_goal[1] - current_y)
-    if dist_to_final > acceptable_error:
+    if dist_to_final > acc_speed_error:
         speed_cm = max(speed_cm, min_speed_ms * 100.0)
 
     if error_distance > 0:

@@ -37,7 +37,4 @@ def save_results(filename, planned_path, actual_trajectory, search_time_ms, trav
         f.write(f"Время поиска пути: {search_time_ms:.2f} мс\n")
         f.write(f"Время прохождения пути: {travel_time_sec:.2f} сек\n")
         f.write(f"Средняя скорость: {avg_speed_cm_s:.2f} см/с\n")
-        f.write(f"Максимальная скорость: {max_speed_cm_s:.2f} см/с\n")
         f.write(f"Среднеквадратичная ошибка (RMSE): {rmse:.2f} см\n")
-
-        f.write("\n" + "=" * 50 + "\n")

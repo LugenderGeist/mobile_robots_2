@@ -154,8 +154,7 @@ def find_path(planner: dict, start: Tuple[float, float], goal: Tuple[float, floa
     return []
 
 def get_velocities(planner: dict, current_x: float, current_y: float,
-                   max_speed: float = 0.5, lookahead_distance: float = 10.0,
-                   kp: float = 0.8, goal_tolerance: float = 5.0) -> Tuple[float, float]:
+                   max_speed: float, kp: float, acc_speed_error: float) -> Tuple[float, float]:
     path = planner['path']
     if not path or len(path) < 2:
         return 0.0, 0.0
@@ -169,42 +168,30 @@ def get_velocities(planner: dict, current_x: float, current_y: float,
             min_dist = dist
             nearest_idx = i
 
-    target_idx = nearest_idx
-    accumulated_dist = 0
-    target_x, target_y = path[nearest_idx]
-
-    for i in range(nearest_idx, len(path) - 1):
-        px1, py1 = path[i]
-        px2, py2 = path[i + 1]
-        segment_dist = math.hypot(px2 - px1, py2 - py1)
-
-        if accumulated_dist + segment_dist >= lookahead_distance:
-            ratio = (lookahead_distance - accumulated_dist) / segment_dist if segment_dist > 0 else 1.0
-            target_x = px1 + ratio * (px2 - px1)
-            target_y = py1 + ratio * (py2 - py1)
-            break
-        else:
-            accumulated_dist += segment_dist
-            target_x, target_y = path[i + 1]
+    target_idx = min(nearest_idx + 3, len(path) - 1)
+    target_x, target_y = path[target_idx]
 
     error_x = target_x - current_x
     error_y = target_y - current_y
     error_distance = math.hypot(error_x, error_y)
 
-    if error_distance < goal_tolerance:
-        return 0.0, 0.0
+    min_speed_ms = 0.03
 
     max_speed_cm = max_speed * 100.0
     speed_cm = min(kp * error_distance, max_speed_cm)
 
+    final_goal = path[-1]
+    dist_to_final = math.hypot(final_goal[0] - current_x, final_goal[1] - current_y)
+    if dist_to_final > acc_speed_error:
+        speed_cm = max(speed_cm, min_speed_ms * 100.0)
+
     if error_distance > 0:
         vx = (error_x / error_distance) * (speed_cm / 100.0)
         vy = (error_y / error_distance) * (speed_cm / 100.0)
-        print(f" Velocities: vx={vx:.3f} м/с, vy={vy:.3f} м/с")
     else:
         vx, vy = 0.0, 0.0
-    print(f" get_velocities: vx={vx:.3f} м/с, vy={vy:.3f} м/с, error={error_distance:.1f} см")
-    return vx, vy
+
+    return vx, -vy
 
 def draw_planning_contours(planner: dict, frame: np.ndarray) -> np.ndarray:
     h, w = frame.shape[:2]

@@ -14,18 +14,18 @@ FIELD_HEIGHT = 220.0
 EDGE_MARGIN = 5
 OBSTACLE_MIN_AREA = 800
 OBSTACLE_MAX_AREA = 500000
-THRESHOLD = 170
-ROBOT_RADIUS = 32.0
+THRESHOLD = 145
+ROBOT_RADIUS = 34.0
 OBSTACLE_SAFETY_MARGIN = 0.0
 PLANNING_STEP = 2.0
 
 # УПРАВЛЕНИЕ
-MAX_SPEED = 0.3
-SPEED_KP = 1.4
+MAX_SPEED = 0.2
+SPEED_KP = 2.2
 ACC_SPEED_ERROR = 5.0
 MAX_OMEGA = 0.5
 ANGLE_KP = 0.5
-ACC_ANGLE_ERROR = 10.0
+ACC_ANGLE_ERROR = 7.0
 REFERENCE_ANGLE = -90.0
 
 EDGE_LIMIT_CM = 15.0
@@ -48,7 +48,7 @@ def mode_camera():
         print("Не удалось открыть камеру!")
         return
 
-    from planners.astar_planner import (
+    from planners.greedy_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame
     )
@@ -151,6 +151,9 @@ def mode_camera():
     cv2.destroyAllWindows()
 
 def mode_robot():
+    path_start = None  # путь к стартовой точке
+    path_target = None  # путь к целевой точке
+
     if not connect_to_robotino():
         print("Не удалось подключиться к Robotino!")
         return
@@ -162,14 +165,14 @@ def mode_robot():
         print("Не удалось открыть камеру!")
         return
 
-    from planners.astar_planner import (
+    from planners.greedy_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame, get_velocities
     )
 
     # ЗАДАЁМ КООРДИНАТЫ СТАРТОВОЙ И ЦЕЛЕВОЙ ТОЧЕК
     start_point = (20.0, 20.0)  # стартовая точка (см)
-    target_point = (200.0, 200.0)  # целевая точка (см)
+    target_point = (180.0, 180.0)  # целевая точка (см)
 
     planner = None
     moving = False
@@ -308,16 +311,20 @@ def mode_robot():
                         current_robot_pos[0], current_robot_pos[1],
                         max_speed=MAX_SPEED,
                         kp=SPEED_KP,
-                        acceptable_error=ACC_SPEED_ERROR
+                        acc_speed_error=ACC_SPEED_ERROR
                     )
                     send_velocity(vx, -vy, 0.0)
 
                     if frame_count % 30 == 0:
                         print(f"vx={vx:.3f}, vy={vy:.3f}, до старта={dist_to_start:.1f} см")
 
-            # Отрисовка (даже если робот не найден)
-            if planner is not None and path:
-                rectified = draw_path_on_frame(planner, rectified, path, (0, 255, 255))
+            if path_start is None:
+                path_start = find_path(planner, current_robot_pos, start_point)
+                if path_start:
+                    moving = True
+
+            if path_start:
+                rectified = draw_path_on_frame(planner, rectified, path_start, (0, 255, 255))
 
         # ========== ДВИЖЕНИЕ К ЦЕЛЕВОЙ ТОЧКЕ ==========
         if at_start and current_robot_pos is not None:
@@ -382,12 +389,22 @@ def mode_robot():
                     current_robot_pos[0], current_robot_pos[1],
                     max_speed=MAX_SPEED,
                     kp=SPEED_KP,
-                    acceptable_error=ACC_SPEED_ERROR
+                    acc_speed_error=ACC_SPEED_ERROR
                 )
                 send_velocity(vx, -vy, 0.0)
 
                 speed = math.hypot(vx, vy) * 100.0
                 speed_log.append(speed)
+
+                # На этапе 2 (после достижения стартовой точки):
+                if path_target is None:
+                    path_target = find_path(planner, current_robot_pos, target_point)
+                    if path_target:
+                        moving = True
+
+                # Отрисовка на этапе 2:
+                if path_target:
+                    rectified = draw_path_on_frame(planner, rectified, path_target, (0, 255, 255))
 
                 if frame_count % 30 == 0:
                     print(f"vx={vx:.3f}, vy={vy:.3f}, до цели={dist_to_target:.1f} см")

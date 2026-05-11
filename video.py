@@ -315,7 +315,7 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
     paused = False
     _state['robot_trajectory'] = []
 
-    from planners.astar_planner import (
+    from planners.greedy_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame
     )
