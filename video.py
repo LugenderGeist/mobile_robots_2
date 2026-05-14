@@ -132,6 +132,9 @@ def detect_obstacles(rectified_frame: np.ndarray, robot_center: tuple = None) ->
     threshold = _state['threshold']
     output_size = _state['output_size']
     field_width = _state['field_width']
+    field_height = _state['field_height']
+    robot_radius = _state['robot_radius']
+    obstacle_safety = _state['obstacle_safety_margin']
 
     gray = cv2.cvtColor(rectified_frame, cv2.COLOR_BGR2GRAY)
     _, mask = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)
@@ -147,7 +150,7 @@ def detect_obstacles(rectified_frame: np.ndarray, robot_center: tuple = None) ->
     mask[:, w - edge_margin:w] = 0
 
     if robot_center is not None:
-        robot_radius_px = int(_state['robot_radius'] / field_width * output_size[0])
+        robot_radius_px = int(robot_radius / field_width * output_size[0])
         cx = int(robot_center[0])
         cy = int(robot_center[1])
         if 0 <= cx < output_size[0] and 0 <= cy < output_size[1]:
@@ -161,29 +164,56 @@ def detect_obstacles(rectified_frame: np.ndarray, robot_center: tuple = None) ->
         area = cv2.contourArea(contour)
         if area < min_area or area > max_area:
             continue
+
         center = cv2.moments(contour)
         if center["m00"] != 0:
             center_x_rect = center["m10"] / center["m00"]
             center_y_rect = center["m01"] / center["m00"]
         else:
             continue
+
         radius_px = int(np.sqrt(area / np.pi))
-        scale_avg = (_state['field_width'] / output_size[0] + _state['field_height'] / output_size[1]) / 2
+        scale_avg = (field_width / output_size[0] + field_height / output_size[1]) / 2
         radius_cm = radius_px * scale_avg
-        real_x = center_x_rect * (_state['field_width'] / output_size[0])
-        real_y = (output_size[1] - center_y_rect) * (_state['field_height'] / output_size[1])
+        real_x = center_x_rect * (field_width / output_size[0])
+        real_y = (output_size[1] - center_y_rect) * (field_height / output_size[1])
+
+        # Расширенный контур с учетом safety margin
+        cx = center_x_rect
+        cy = center_y_rect
+
+        expanded_contour = []
+        for point in contour:
+            px, py = point[0]
+            dx = px - cx
+            dy = py - cy
+            dist = np.sqrt(dx * dx + dy * dy)
+            if dist > 0:
+                safety_px = int((robot_radius + obstacle_safety) / field_width * output_size[0])
+                scale = (dist + safety_px) / dist
+                new_x = cx + dx * scale
+                new_y = cy + dy * scale
+                expanded_contour.append([[int(new_x), int(new_y)]])
+            else:
+                expanded_contour.append([[int(px), int(py)]])
+
+        expanded_contour = np.array(expanded_contour, dtype=np.int32)
+
         obstacles.append({
             'center_pixel': (center_x_rect, center_y_rect),
             'center_real': (real_x, real_y),
             'area': area,
             'radius_px': radius_px,
             'radius_cm': radius_cm,
-            'contour': contour
+            'contour': contour,
+            'expanded_contour': expanded_contour
         })
-        cv2.circle(safety_mask, (int(center_x_rect), int(center_y_rect)), radius_px, 255, -1)
+
+        cv2.fillPoly(safety_mask, [expanded_contour], 255)
 
     _state['safety_mask'] = safety_mask
     return obstacles
+
 
 # ========== ОТРИСОВКА ==========
 def draw_axes_2d(frame: np.ndarray, marker_corners: np.ndarray, axis_length: float = 60) -> np.ndarray:
@@ -317,7 +347,7 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
     paused = False
     _state['robot_trajectory'] = []
 
-    from planners.greedy_planner import (
+    from planners.astar_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame
     )
