@@ -407,9 +407,8 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
             current_path = None  # Сбрасываем путь при новой цели
             path_printed = False
             if planner:
-                from planners.astar_planner import reset_path
+                from planners.greedy_planner import reset_path
                 reset_path(planner)
-            print(f"\nНовая цель: ({real_x:.1f}, {real_y:.1f})")
 
     cv2.setMouseCallback("Camera Feed", mouse_callback)
 
@@ -417,7 +416,7 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
     paused = False
     _state['robot_trajectory'] = []
 
-    from planners.astar_planner import (
+    from planners.greedy_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame
     )
@@ -484,16 +483,12 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
                         user_point = None
                         current_path = None
                         if planner:
-                            from planners.astar_planner import reset_path
+                            from planners.greedy_planner import reset_path
                             reset_path(planner)
                 else:
                     # Если нет пути, строим новый
                     if current_path is None or len(current_path) == 0:
                         current_path = find_path(planner, current_robot_pos, user_point_real)
-                        if current_path:
-                            print(f"Путь построен! Количество точек: {len(current_path)}")
-                        else:
-                            print("Не удалось построить путь!")
 
             if current_path is not None and len(current_path) > 1:
                 rectified = draw_path_on_frame(planner, rectified, current_path, (0, 255, 0))
@@ -536,9 +531,6 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
-        elif key == ord('p'):
-            paused = not paused
-            print("Пауза" if paused else "Продолжение")
 
         if single_frame and frame_count >= 1:
             break

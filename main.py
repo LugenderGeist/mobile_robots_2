@@ -22,7 +22,7 @@ PLANNING_STEP = 1.0
 
 # УПРАВЛЕНИЕ
 MAX_SPEED = 0.2
-SPEED_KP = 2.6
+SPEED_KP = 3.6
 ACC_SPEED_ERROR = 5.0
 MAX_OMEGA = 0.5
 ANGLE_KP = 0.5
@@ -51,14 +51,13 @@ def mode_camera():
         print("Не удалось открыть камеру!")
         return
 
-    from planners.astar_planner import (
+    from planners.greedy_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame, reset_path
     )
 
-    # ЗАДАЁМ КООРДИНАТЫ СТАРТОВОЙ И ЦЕЛЕВОЙ ТОЧЕК
-    start_point = (20.0, 20.0)  # стартовая точка (см)
-    target_point = (200.0, 200.0)  # целевая точка (см)
+    start_point = (40.0, 40.0)
+    target_point = (180.0, 180.0)
 
     planner = None
     frame_count = 0
@@ -154,7 +153,6 @@ def mode_camera():
             # Перестроить путь
             reset_path(planner)
             current_path = None
-            print("Путь сброшен")
 
     cap.release()
     cv2.destroyAllWindows()
@@ -172,14 +170,13 @@ def mode_robot():
         print("Не удалось открыть камеру!")
         return
 
-    from planners.astar_planner import (
+    from planners.greedy_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame, get_velocities, reset_path
     )
 
-    # ЗАДАЁМ КООРДИНАТЫ СТАРТОВОЙ И ЦЕЛЕВОЙ ТОЧЕК
-    start_point = (40.0, 40.0)  # стартовая точка (см)
-    target_point = (180.0, 180.0)  # целевая точка (см)
+    start_point = (30.0, 30.0)
+    target_point = (190.0, 190.0)
 
     planner = None
     moving = False
@@ -209,8 +206,6 @@ def mode_robot():
             delta -= 360
         while delta < -180:
             delta += 360
-
-        print(f"current={current_angle:.1f}°, target={REFERENCE_ANGLE:.1f}°, delta={delta:.1f}°")
 
         if abs(delta) < ACC_ANGLE_ERROR:
             return True
@@ -432,7 +427,6 @@ def mode_robot():
 
     cap.release()
     cv2.destroyAllWindows()
-
 
 def main():
     print("1. Реальная камера")
