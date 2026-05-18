@@ -25,14 +25,21 @@ def calculate_rmse(planned_path, actual_trajectory):
 
     return math.sqrt(total_error / len(actual_trajectory))
 
-def calculate_r2(planned_path, actual_trajectory):
 
-    # R² = 1 - (SS_res / SS_tot)
+def calculate_r2(planned_path, actual_trajectory):
+    """
+    Расчет коэффициента детерминации R² для сравнения реальной траектории с планируемой.
+    R² показывает, какую долю вариации реальной траектории объясняет планируемая.
+    R² = 1 - (SS_res / SS_tot)
+    где:
+    SS_res - сумма квадратов расстояний от реальных точек до планируемого пути
+    SS_tot - сумма квадратов расстояний от реальных точек до среднего положения реального пути
+    """
     if not planned_path or not actual_trajectory or len(actual_trajectory) < 2:
         return 0.0
 
-    # Находим ближайшую точку на спланированном пути для каждой реальной точки
-    errors = []
+    # Для каждой реальной точки находим ближайшее расстояние до планируемого пути
+    distances_to_planned = []
     for actual_point in actual_trajectory:
         ax, ay, _ = actual_point
         min_dist = float('inf')
@@ -41,24 +48,31 @@ def calculate_r2(planned_path, actual_trajectory):
             dist = math.hypot(ax - px, ay - py)
             if dist < min_dist:
                 min_dist = dist
-        errors.append(min_dist)
+        distances_to_planned.append(min_dist)
 
-    # SS_res - сумма квадратов ошибок
-    ss_res = sum(e ** 2 for e in errors)
+    # SS_res - сумма квадратов расстояний до планируемого пути
+    ss_res = sum(d ** 2 for d in distances_to_planned)
 
-    # Среднее значение ошибок
-    mean_error = sum(errors) / len(errors)
+    # Вычисляем среднее положение реальной траектории
+    avg_x = sum(p[0] for p in actual_trajectory) / len(actual_trajectory)
+    avg_y = sum(p[1] for p in actual_trajectory) / len(actual_trajectory)
 
-    # SS_tot - сумма квадратов отклонений от среднего
-    ss_tot = sum((e - mean_error) ** 2 for e in errors)
+    # SS_tot - сумма квадратов расстояний от реальных точек до их среднего положения
+    ss_tot = 0.0
+    for actual_point in actual_trajectory:
+        ax, ay, _ = actual_point
+        dist_to_center = math.hypot(ax - avg_x, ay - avg_y)
+        ss_tot += dist_to_center ** 2
 
-    # R² = 1 - (SS_res / SS_tot)
     if ss_tot == 0:
         return 1.0
 
+    # R² может быть отрицательным, если модель хуже, чем просто среднее значение
+    # Но в нашем случае мы ограничиваем снизу нулем, так как отрицательное значение не имеет смысла
     r2 = 1 - (ss_res / ss_tot)
 
-    return r2
+    # Ограничиваем R² диапазоном [0, 1]
+    return max(0.0, min(1.0, r2))
 
 def save_results(filename, planned_path, actual_trajectory, search_time_ms, travel_time_sec, max_speed_cm_s,
                  avg_speed_cm_s):

@@ -405,7 +405,7 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
             user_point_real = (real_x, real_y)
             current_path = None  # Сбрасываем путь при новой цели
             if planner:
-                from planners.greedy_planner import reset_path
+                from planners.astar_planner import reset_path
                 reset_path(planner)
 
     cv2.setMouseCallback("Camera Feed", mouse_callback)
@@ -414,7 +414,7 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
     paused = False
     _state['robot_trajectory'] = []
 
-    from planners.greedy_planner import (
+    from planners.astar_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame
     )
@@ -481,7 +481,7 @@ def process_camera_feed(camera_id: int = 0, single_frame: bool = False):
                         user_point = None
                         current_path = None
                         if planner:
-                            from planners.greedy_planner import reset_path
+                            from planners.astar_planner import reset_path
                             reset_path(planner)
                 else:
                     # Если нет пути, строим новый

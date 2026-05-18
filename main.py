@@ -51,7 +51,7 @@ def mode_camera():
         print("Не удалось открыть камеру!")
         return
 
-    from planners.greedy_planner import (
+    from planners.astar_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame, reset_path
     )
@@ -170,7 +170,7 @@ def mode_robot():
         print("Не удалось открыть камеру!")
         return
 
-    from planners.greedy_planner import (
+    from planners.astar_planner import (
         create_planner, update_obstacles, draw_planning_contours,
         find_path, draw_path_on_frame, get_velocities, reset_path
     )
